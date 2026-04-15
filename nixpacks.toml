@@ -1,6 +1,6 @@
 # Nixpacks configuration for hybrid Node/Python project
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311", "gcc", "libstdcxx5"]
+nixPkgs = ["nodejs_20", "python311", "gcc", "stdenv.cc.cc.lib"]
 
 [phases.install]
 cmds = [
