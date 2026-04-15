@@ -5,8 +5,7 @@ Trains, compares, and manages multiple regression models.
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
+from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import joblib
 import pandas as pd
@@ -68,13 +67,11 @@ class MLPipeline:
                 random_state=random_state,
                 n_jobs=-1,
             ),
-            "XGBoost": XGBRegressor(
-                n_estimators=params.get("xgb_n_estimators", 100),
+            "Gradient Boosting": HistGradientBoostingRegressor(
+                max_iter=params.get("xgb_n_estimators", 100),
                 learning_rate=params.get("xgb_learning_rate", 0.1),
                 max_depth=params.get("xgb_max_depth", 6),
                 random_state=random_state,
-                n_jobs=-1,
-                verbosity=0,
             ),
         }
 

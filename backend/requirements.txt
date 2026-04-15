@@ -1,7 +1,6 @@
 fastapi
-uvicorn[standard]
+uvicorn
 scikit-learn
-xgboost
 pandas
 numpy
 python-jose[cryptography]

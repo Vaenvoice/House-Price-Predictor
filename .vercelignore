@@ -1,0 +1,29 @@
+# Frontend Source and Dependencies
+frontend/node_modules
+frontend/src
+frontend/public
+frontend/vite.config.js
+frontend/postcss.config.js
+frontend/tailwind.config.js
+frontend/eslint.config.js
+
+# Docker and Local Dev
+docker-compose.yml
+Dockerfile
+backend/Dockerfile
+backend/.dockerignore
+
+# Git and Documentation
+.git
+.gitignore
+README.md
+DEPLOYMENT.md
+
+# Misc
+scratch/
+.python-version
+.env.example
+
+# Unused Model Artifacts (to save space)
+backend/data/models/xgboost.joblib
+backend/data/synthetic_dataset.csv
