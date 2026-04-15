@@ -1,11 +1,8 @@
-# Frontend Source and Dependencies
+# Frontend Dependencies (Auto-installed by Vercel)
 frontend/node_modules
-frontend/src
-frontend/public
-frontend/vite.config.js
-frontend/postcss.config.js
-frontend/tailwind.config.js
-frontend/eslint.config.js
+
+# Project build artifacts handled by Vercel
+frontend/dist
 
 # Docker and Local Dev
 docker-compose.yml
