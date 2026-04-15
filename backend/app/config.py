@@ -93,3 +93,15 @@ LOCATIONS = {
 }
 
 LOCATION_NAMES = list(LOCATIONS.keys())
+
+# Pre-computed for speed
+PRECOMPUTED_LOCATIONS = [
+    {
+        "name": name,
+        "type": info["type"],
+        "lat": info["lat"],
+        "lng": info["lng"],
+        "label": info["label"],
+    }
+    for name, info in LOCATIONS.items()
+]

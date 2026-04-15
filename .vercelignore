@@ -21,6 +21,5 @@ scratch/
 .python-version
 .env.example
 
-# Unused Model Artifacts (to save space)
-backend/data/models/xgboost.joblib
+# Unused Data Artifacts (to save space)
 backend/data/synthetic_dataset.csv

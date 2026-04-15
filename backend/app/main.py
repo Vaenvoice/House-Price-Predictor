@@ -58,9 +58,9 @@ async def lifespan(app: FastAPI):
             loaded = pipeline.is_trained and bool(pipeline.models)
 
         if not loaded:
-            # In Vercel serverless runtime we avoid heavy cold-start training.
             if IS_VERCEL:
-                print("No cached models found in Vercel runtime. API will run in limited mode until models are provided.")
+                print("Using bundled fallback models for Vercel.")
+                pipeline.load(model_dir=BUNDLED_MODEL_DIR)
             else:
                 print("Training ML models...")
                 pipeline.train()
@@ -120,17 +120,10 @@ def root():
     }
 
 
+# Pre-computed config for speed
+from app.config import PRECOMPUTED_LOCATIONS
+
 @app.get("/api/locations", tags=["Config"])
 def get_locations():
     """Get available locations with metadata."""
-    from app.config import LOCATIONS
-    return [
-        {
-            "name": name,
-            "type": info["type"],
-            "lat": info["lat"],
-            "lng": info["lng"],
-            "label": info["label"],
-        }
-        for name, info in LOCATIONS.items()
-    ]
+    return PRECOMPUTED_LOCATIONS

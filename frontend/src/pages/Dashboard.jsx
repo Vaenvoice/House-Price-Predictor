@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import apiClient from "@/api/client";
 import { Card } from "@/components/ui/Card";
 import { motion, AnimatePresence } from "framer-motion";
@@ -74,6 +74,17 @@ export default function Dashboard() {
   const handleSliderChange = (e) => {
     setFormData({ ...formData, [e.target.name]: Number(e.target.value) });
   };
+
+  // Pre-compute comparison stats to avoid re-renders during slide animations
+  const comparisonStats = useMemo(() => {
+    if (!pinnedPrediction || !prediction) return null;
+    const diff = prediction.predicted_price - pinnedPrediction.predicted_price;
+    return {
+      diff,
+      absDiffLakhs: Math.abs(diff / 100000).toFixed(1),
+      isUp: diff > 0
+    };
+  }, [prediction, pinnedPrediction]);
 
   return (
     <div className="space-y-10 pb-20">
@@ -265,11 +276,11 @@ export default function Dashboard() {
                          <div className="text-xs font-medium text-muted-foreground mb-1">Impact Difference</div>
                          <div className={clsx(
                            "text-xl font-bold flex items-center gap-2",
-                           prediction.predicted_price > pinnedPrediction.predicted_price ? "text-green-600" : "text-rose-600"
+                           comparisonStats.isUp ? "text-green-600" : "text-rose-600"
                          )}>
-                            {prediction.predicted_price > pinnedPrediction.predicted_price ? "+" : "-"}
-                            ₹{Math.abs((prediction.predicted_price - pinnedPrediction.predicted_price) / 100000).toFixed(1)}L
-                            {prediction.predicted_price > pinnedPrediction.predicted_price ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                            {comparisonStats.isUp ? "+" : "-"}
+                            ₹{comparisonStats.absDiffLakhs}L
+                            {comparisonStats.isUp ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                          </div>
                       </div>
                    </div>

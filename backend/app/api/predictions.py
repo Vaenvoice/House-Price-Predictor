@@ -7,8 +7,18 @@ from app.database import get_connection
 from app.schemas.schemas import PredictionRequest, PredictionResponse, PredictionHistory
 from app.config import LOCATION_NAMES
 from typing import List
+from functools import lru_cache
 
 router = APIRouter()
+
+# Cached helper for prediction results
+@lru_cache(maxsize=128)
+def get_cached_prediction(area: int, rooms: int, location: str, age: int):
+    """Heavy computation helper with LRU cache."""
+    result = pipeline.predict(area, rooms, location, age)
+    suggestions = pipeline.get_suggestions(area, rooms, location, age)
+    insights = pipeline.get_advanced_insights(area, rooms, location, age)
+    return result, suggestions, insights
 
 
 def format_inr(amount):
@@ -33,9 +43,10 @@ def predict_price(req: PredictionRequest):
             detail=f"Invalid location. Choose from: {LOCATION_NAMES}",
         )
 
-    result = pipeline.predict(req.area, req.rooms, req.location, req.age)
-    suggestions = pipeline.get_suggestions(req.area, req.rooms, req.location, req.age)
-    insights = pipeline.get_advanced_insights(req.area, req.rooms, req.location, req.age)
+    # Retrieve from cache or compute
+    result, suggestions, insights = get_cached_prediction(
+        req.area, req.rooms, req.location, req.age
+    )
 
     # Save to database
     try:
