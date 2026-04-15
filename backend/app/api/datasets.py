@@ -7,7 +7,10 @@ from app.ml.dataset_gen import generate_dataset
 from app.ml.preprocessing import parse_uploaded_csv
 from app.schemas.schemas import DatasetStats
 from app.config import DATASET_PATH
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 router = APIRouter()
 
@@ -21,6 +24,8 @@ def get_dataset(
     location: str = Query(None, description="Filter by location"),
 ):
     """Get the dataset with pagination, sorting, and filtering."""
+    if pd is None:
+        raise HTTPException(status_code=503, detail="Dataset viewing requires Pandas (Local Dev only)")
     df = pipeline.load_data()
 
     # Filter by location
@@ -52,6 +57,23 @@ def get_dataset(
 @router.get("/dataset/stats", response_model=DatasetStats)
 def get_dataset_stats():
     """Get summary statistics of the dataset."""
+    if pd is None:
+        # Fallback to pre-computed stats if available
+        summary = getattr(pipeline, "analytics_summary", {})
+        if not summary:
+            raise HTTPException(status_code=503, detail="Stats unavailable (requires Pandas or pre-computed models)")
+        return {
+            "total_rows": summary.get("total_samples", 0),
+            "columns": ["area", "rooms", "location", "age", "price"],
+            "area_range": [400, 5000], # defaults
+            "price_range": [summary.get("avg_price", 0)*0.5, summary.get("avg_price", 0)*2],
+            "age_range": [0, 60],
+            "room_distribution": {},
+            "location_distribution": {},
+            "mean_price": summary.get("avg_price", 0),
+            "median_price": summary.get("median_price", 0),
+        }
+
     df = pipeline.load_data()
 
     return DatasetStats(
@@ -110,6 +132,8 @@ def regenerate_dataset():
 @router.get("/dataset/distribution")
 def get_price_distribution(bins: int = Query(20, ge=5, le=50)):
     """Get price distribution histogram data."""
+    if pd is None:
+        raise HTTPException(status_code=503, detail="Histogram requires Pandas (Local Dev only)")
     df = pipeline.load_data()
     import numpy as np
 
