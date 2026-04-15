@@ -1,11 +1,15 @@
+# Nixpacks configuration for hybrid Node/Python project
 [setup]
-pkgs = ["nodejs-18_x", "python311", "gcc"]
+pkgs = ["nodejs_20", "python311", "gcc"]
 
 [install]
-cmds = ["npm install"]
+cmds = [
+  "npm install",
+  "python -m venv /opt/venv && /opt/venv/bin/pip install -r backend/requirements.txt"
+]
 
 [build]
-cmds = ["npm run build", "pip install -r backend/requirements.txt"]
+cmds = ["npm run build"]
 
 [start]
-cmd = "uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+cmd = "PATH=\"/opt/venv/bin:$PATH\" uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
