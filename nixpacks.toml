@@ -1,15 +1,15 @@
-# Nixpacks configuration for hybrid Node/Python project
+# Nixpacks configuration for Python Backend Only
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311", "gcc", "stdenv.cc.cc.lib"]
+nixPkgs = ["python311", "gcc", "stdenv.cc.cc.lib"]
 
 [phases.install]
 cmds = [
-  "npm install",
   "python -m venv /opt/venv && /opt/venv/bin/pip install -r backend/requirements.txt"
 ]
 
+# Build phase is empty since we are only running the Python app
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["echo 'Skipping frontend build on Railway'"]
 
 [start]
 cmd = "PATH=\"/opt/venv/bin:$PATH\" PYTHONPATH=$PYTHONPATH:$(pwd)/backend uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // The Vite proxy ensures /api requests are routed to FastAPI at port 8000
 const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
