@@ -1,14 +1,16 @@
 # Nixpacks configuration for hybrid Node/Python project
-[setup]
-pkgs = ["nodejs_20", "python311", "gcc"]
+providers = ["node", "python"]
 
-[install]
+[phases.setup]
+nixPkgs = ["nodejs_20", "python311", "gcc"]
+
+[phases.install]
 cmds = [
   "npm install",
   "python -m venv /opt/venv && /opt/venv/bin/pip install -r backend/requirements.txt"
 ]
 
-[build]
+[phases.build]
 cmds = ["npm run build"]
 
 [start]
