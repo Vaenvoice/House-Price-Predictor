@@ -1,5 +1,5 @@
 [setup]
-pkgs = ["nodejs-20_x", "python311", "gcc"]
+pkgs = ["nodejs-18_x", "python311", "gcc"]
 
 [install]
 cmds = ["npm install"]
