@@ -5,7 +5,7 @@
   "framework": "vite",
   "functions": {
     "api/**/*.py": {
-      "excludeFiles": "frontend/**|node_modules/**|backend/data/**|tests/**|docs/**"
+      "excludeFiles": "frontend/**|node_modules/**|backend/data/*.csv|backend/app/ml/dataset_gen.py|backend/retrain.py|tests/**|docs/**|**/*.pyc|**/__pycache__/**"
     }
   },
   "rewrites": [

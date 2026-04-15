@@ -8,7 +8,10 @@ from sklearn.linear_model import LinearRegression, Ridge, Lasso
 from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import joblib
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 from app.config import MODEL_DIR, DATASET_PATH
 from app.ml.preprocessing import DataPreprocessor
@@ -28,6 +31,9 @@ class MLPipeline:
 
     def load_data(self, csv_path=None):
         """Load dataset from CSV or generate if missing."""
+        if pd is None:
+            print("Warning: Pandas not available. Dataset loading skipped.")
+            return None
         if csv_path:
             return pd.read_csv(csv_path)
         if DATASET_PATH.exists():
@@ -124,12 +130,27 @@ class MLPipeline:
 
         self.is_trained = True
 
+        # Pre-compute analytics summary for Pandas-free runtime
+        summary = {}
+        if df is not None:
+            summary = {
+                "total_samples": len(df),
+                "avg_price": float(df["price"].mean()),
+                "median_price": float(df["price"].median()),
+                "price_std": float(df["price"].std()),
+                "avg_area": float(df["area"].mean()),
+                "avg_age": float(df["age"].mean()),
+                "num_locations": df["location"].nunique(),
+            }
+
         # Save pipeline state
         joblib.dump(
             {
                 "best_model_name": self.best_model_name,
                 "metrics": self.metrics,
                 "feature_importances": self.feature_importances,
+                "analytics_summary": summary,
+                "location_stats": self.get_location_stats() if df is not None else []
             },
             MODEL_DIR / "pipeline_state.joblib",
         )
@@ -142,11 +163,8 @@ class MLPipeline:
         if not self.is_trained:
             self.load()
 
-        input_df = pd.DataFrame(
-            [{"area": area, "rooms": rooms, "location": location, "age": age}]
-        )
-
-        X = self.preprocessor.transform(input_df)
+        input_data = {"area": area, "rooms": rooms, "location": location, "age": age}
+        X = self.preprocessor.transform(input_data)
         model = self.models[self.best_model_name]
         prediction = float(model.predict(X)[0])
 
@@ -383,6 +401,11 @@ class MLPipeline:
             self.feature_importances = state["feature_importances"]
 
             self.preprocessor.load()
+            
+            # Load pre-computed state
+            self.analytics_summary = state.get("analytics_summary", {})
+            self.location_stats = state.get("location_stats", [])
+            self.correlation_data = state.get("correlation_data", {"columns": [], "data": []})
 
             for name in self.metrics.keys():
                 model_file = MODEL_DIR / (name.lower().replace(" ", "_") + ".joblib")
@@ -396,15 +419,22 @@ class MLPipeline:
             self.is_trained = False
 
     def get_correlation_data(self):
-        """Return correlation matrix for numeric features."""
+        """Return correlation matrix – use pre-computed if on Vercel."""
+        if hasattr(self, 'correlation_data'):
+            return self.correlation_data
+            
         df = self.load_data()
+        if df is None: return {"columns": [], "data": []}
+        
         numeric_df = df.select_dtypes(include=[np.number])
         corr = numeric_df.corr()
         return {"columns": corr.columns.tolist(), "data": corr.values.tolist()}
 
     def get_scatter_data(self, x_col="area", y_col="price", sample_size=500):
-        """Return scatter plot data (sampled for performance)."""
+        """Return scatter plot data – requires Pandas (local only)."""
         df = self.load_data()
+        if df is None: return {"x": [], "y": [], "labels": []}
+        
         if len(df) > sample_size:
             df = df.sample(sample_size, random_state=42)
         return {
@@ -414,8 +444,13 @@ class MLPipeline:
         }
 
     def get_location_stats(self):
-        """Return pricing statistics grouped by location."""
+        """Return pricing statistics – use pre-computed if on Vercel."""
+        if hasattr(self, 'location_stats') and self.location_stats:
+            return self.location_stats
+            
         df = self.load_data()
+        if df is None: return []
+        
         stats = []
         for location in df["location"].unique():
             loc_df = df[df["location"] == location]

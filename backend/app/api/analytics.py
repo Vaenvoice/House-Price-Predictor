@@ -44,16 +44,13 @@ def get_analytics_summary():
     if not pipeline.is_trained:
         return {"status": "not_trained"}
 
-    df = pipeline.load_data()
+    # Use pre-computed summary to avoid Pandas runtime dependency
+    summary = getattr(pipeline, "analytics_summary", {})
+    if not summary:
+        return {"status": "summary_missing"}
 
     return {
-        "total_samples": len(df),
-        "avg_price": round(float(df["price"].mean()), 2),
-        "median_price": round(float(df["price"].median()), 2),
-        "price_std": round(float(df["price"].std()), 2),
-        "avg_area": round(float(df["area"].mean()), 2),
-        "avg_age": round(float(df["age"].mean()), 2),
-        "num_locations": df["location"].nunique(),
+        **summary,
         "best_model": pipeline.best_model_name,
         "best_r2": pipeline.metrics.get(pipeline.best_model_name, {}).get(
             "r2_score", 0

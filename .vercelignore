@@ -22,4 +22,8 @@ scratch/
 .env.example
 
 # Unused Data Artifacts (to save space)
-backend/data/synthetic_dataset.csv
+backend/data/*.csv
+backend/data/models/lasso_regression.joblib
+backend/data/models/linear_regression.joblib
+backend/data/models/ridge_regression.joblib
+backend/data/models/random_forest.joblib

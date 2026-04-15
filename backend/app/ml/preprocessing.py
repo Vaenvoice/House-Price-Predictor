@@ -50,35 +50,48 @@ class DataPreprocessor:
 
         return X_encoded.values, y, self.feature_names
 
-    def transform(self, df):
-        """Transform new data using fitted preprocessor."""
+    def transform(self, data):
+        """Transform new data using fitted preprocessor without Pandas."""
         if not self.is_fitted:
             raise ValueError("Preprocessor not fitted. Call fit_transform first.")
 
-        df = df.copy()
+        # Handle both single dict and list of dicts/lists
+        if isinstance(data, dict):
+            samples = [data]
+        else:
+            samples = data
 
-        # Handle missing values
-        for col in df.select_dtypes(include=[np.number]).columns:
-            df[col] = df[col].fillna(df[col].median())
-        for col in df.select_dtypes(include=["object"]).columns:
-            df[col] = df[col].fillna(df[col].mode()[0])
+        num_samples = len(samples)
+        num_features = len(self.feature_names)
+        X_encoded = np.zeros((num_samples, num_features))
 
-        # One-hot encode
-        X_encoded = pd.get_dummies(df, columns=["location"], prefix="loc")
+        for i, sample in enumerate(samples):
+            # 1. Fill base numeric features
+            area = sample.get("area", 1200)
+            rooms = sample.get("rooms", 2)
+            age = sample.get("age", 5)
+            location = sample.get("location", "Mumbai")
 
-        # Add missing columns (locations not in input)
-        for col in self.feature_names:
-            if col not in X_encoded.columns:
-                X_encoded[col] = 0
+            # Numeric columns are at specific indices or handled by name
+            # For simplicity, we create a temporary array for scaling
+            numeric_vals = np.array([[area, rooms, age]])
+            scaled_vals = self.scaler.transform(numeric_vals)[0]
 
-        # Remove extra columns and enforce order
-        X_encoded = X_encoded[self.feature_names]
+            # Map to feature names indices
+            for j, fname in enumerate(self.feature_names):
+                if fname == "area":
+                    X_encoded[i, j] = scaled_vals[0]
+                elif fname == "rooms":
+                    X_encoded[i, j] = scaled_vals[1]
+                elif fname == "age":
+                    X_encoded[i, j] = scaled_vals[2]
+                elif fname.startswith("loc_"):
+                    # Check if this is the target location
+                    loc_name = fname[4:] # remove "loc_"
+                    if location == loc_name:
+                        X_encoded[i, j] = 1.0
 
-        # Scale numeric features
-        numeric_cols = [c for c in ["area", "rooms", "age"] if c in X_encoded.columns]
-        X_encoded[numeric_cols] = self.scaler.transform(X_encoded[numeric_cols])
-
-        return X_encoded.values
+        return X_encoded
 
     def save(self):
         """Persist preprocessor state to disk."""
