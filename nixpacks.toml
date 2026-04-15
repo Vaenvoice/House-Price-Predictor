@@ -12,4 +12,4 @@ cmds = [
 cmds = ["npm run build"]
 
 [start]
-cmd = "PATH=\"/opt/venv/bin:$PATH\" uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+cmd = "PATH=\"/opt/venv/bin:$PATH\" PYTHONPATH=$PYTHONPATH:$(pwd)/backend uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
