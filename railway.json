@@ -1,11 +1,7 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "env": {
-      "NIXPACKS_PKGS": "nodejs_20 python311 gcc",
-      "NIXPACKS_PYTHON_VENV": "/opt/venv"
-    }
+    "builder": "NIXPACKS"
   },
   "deploy": {
     "startCommand": "PATH=\"/opt/venv/bin:$PATH\" uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT",
