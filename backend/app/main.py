@@ -1,0 +1,136 @@
+"""
+EstateAI – FastAPI Application Entry Point
+Intelligent House Price Prediction Platform
+"""
+from contextlib import asynccontextmanager
+import os
+import shutil
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.database import init_db
+from app.dependencies import pipeline
+from app.ml.dataset_gen import generate_dataset
+from app.config import DATASET_PATH, IS_VERCEL, BUNDLED_DATA_DIR, BUNDLED_MODEL_DIR
+from app.api import predictions, models, datasets, analytics, auth
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application startup/shutdown lifecycle."""
+    print("\n===============================================")
+    print("   VaenEstate - Intelligent Price Prediction")
+    print("===============================================")
+
+    # 1. Initialize database
+    try:
+        # On Vercel, copy packaged data/models into writable /tmp.
+        if IS_VERCEL:
+            bundled_dataset = BUNDLED_DATA_DIR / "synthetic_dataset.csv"
+            if bundled_dataset.exists() and not DATASET_PATH.exists():
+                DATASET_PATH.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(bundled_dataset, DATASET_PATH)
+
+            if BUNDLED_MODEL_DIR.exists():
+                from app.config import MODEL_DIR
+                MODEL_DIR.mkdir(parents=True, exist_ok=True)
+                for file_path in BUNDLED_MODEL_DIR.glob("*.joblib"):
+                    target = MODEL_DIR / file_path.name
+                    if not target.exists():
+                        shutil.copy2(file_path, target)
+
+        print("\nInitializing database...")
+        init_db()
+
+        # 2. Generate dataset if missing
+        if not DATASET_PATH.exists():
+            print("Generating synthetic dataset (10,000 samples)...")
+            generate_dataset()
+        else:
+            print(f"Dataset found: {DATASET_PATH}")
+
+        # 3. Load saved models when possible, train only when needed
+        force_retrain = os.getenv("FORCE_RETRAIN", "false").lower() in {"1", "true", "yes"}
+        loaded = False
+        if not force_retrain:
+            print("Loading saved ML models...")
+            pipeline.load()
+            loaded = pipeline.is_trained and bool(pipeline.models)
+
+        if not loaded:
+            # In Vercel serverless runtime we avoid heavy cold-start training.
+            if IS_VERCEL:
+                print("No cached models found in Vercel runtime. API will run in limited mode until models are provided.")
+            else:
+                print("Training ML models...")
+                pipeline.train()
+        else:
+            print("Using cached trained models from disk.")
+
+        print(f"\nBest model: {pipeline.best_model_name}")
+        for name, m in pipeline.metrics.items():
+            marker = " *" if name == pipeline.best_model_name else ""
+            print(f"   {name}: R2={m['r2_score']:.4f}, RMSE={m['rmse']:,.0f}, MAE={m['mae']:,.0f}{marker}")
+    except Exception as e:
+        print(f"\nCRITICAL: Error during startup sequence: {e}")
+        print("Continuing with limited functionality...")
+
+    print("\nVaenEstate is ready!")
+    print("API docs: http://localhost:8000/docs\n")
+
+    yield
+
+    print("\nEstateAI shutting down...")
+
+
+# Create FastAPI app
+app = FastAPI(
+    title="EstateAI API",
+    description="Intelligent House Price Prediction Platform – AI-powered property valuation for Indian real estate",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register routers
+app.include_router(predictions.router, prefix="/api", tags=["Predictions"])
+app.include_router(models.router, prefix="/api", tags=["Models"])
+app.include_router(datasets.router, prefix="/api", tags=["Datasets"])
+app.include_router(analytics.router, prefix="/api", tags=["Analytics"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+
+
+@app.get("/", tags=["Health"])
+def root():
+    """API health check endpoint."""
+    return {
+        "name": "EstateAI API",
+        "version": "1.0.0",
+        "status": "running",
+        "models_trained": pipeline.is_trained,
+        "best_model": pipeline.best_model_name,
+    }
+
+
+@app.get("/api/locations", tags=["Config"])
+def get_locations():
+    """Get available locations with metadata."""
+    from app.config import LOCATIONS
+    return [
+        {
+            "name": name,
+            "type": info["type"],
+            "lat": info["lat"],
+            "lng": info["lng"],
+            "label": info["label"],
+        }
+        for name, info in LOCATIONS.items()
+    ]
