@@ -5,8 +5,10 @@ Intelligent House Price Prediction Platform
 from contextlib import asynccontextmanager
 import os
 import shutil
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.database import init_db
 from app.dependencies import pipeline
@@ -107,17 +109,39 @@ app.include_router(datasets.router, prefix="/api", tags=["Datasets"])
 app.include_router(analytics.router, prefix="/api", tags=["Analytics"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 
-
-@app.get("/", tags=["Health"])
-def root():
-    """API health check endpoint."""
+@app.get("/api/health", tags=["Health"])
+def health_check():
+    """Detailed health check for Railway."""
     return {
-        "name": "EstateAI API",
-        "version": "1.0.0",
-        "status": "running",
-        "models_trained": pipeline.is_trained,
-        "best_model": pipeline.best_model_name,
+        "status": "online",
+        "models_loaded": pipeline.is_trained,
+        "best_model": pipeline.best_model_name
     }
+
+# 1. Mount Static Files (after API routes)
+# We assume the frontend is built into frontend/dist
+frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "dist")
+
+if os.path.exists(frontend_path):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_react_app(request: Request, full_path: str):
+        """Serve the React app for any non-API routes."""
+        if full_path.startswith("api"):
+            return None # FastAPI will continue to router
+        
+        # Check if file exists in dist (for images, favicon, etc)
+        file_path = os.path.join(frontend_path, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+            
+        # Default to index.html for SPA routing
+        return FileResponse(os.path.join(frontend_path, "index.html"))
+else:
+    print(f"Warning: Frontend dist not found at {frontend_path}. Static serving disabled.")
+
+
 
 
 # Pre-computed config for speed
