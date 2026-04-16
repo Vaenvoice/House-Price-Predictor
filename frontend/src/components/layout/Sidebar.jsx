@@ -4,7 +4,6 @@ import {
   BarChart3,
   MapPin,
   Database,
-  Beaker,
   History,
   Home,
 } from "lucide-react";
@@ -15,7 +14,6 @@ const navigation = [
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Location", href: "/location", icon: MapPin },
   { name: "Dataset Explorer", href: "/dataset", icon: Database },
-  { name: "Model Lab", href: "/models", icon: Beaker },
   { name: "History", href: "/history", icon: History },
 ];
 

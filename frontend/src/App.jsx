@@ -6,7 +6,6 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const LocationIntel = lazy(() => import("./pages/LocationIntel"));
 const DatasetExplorer = lazy(() => import("./pages/DatasetExplorer"));
-const ModelLab = lazy(() => import("./pages/ModelLab"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 
 export default function App() {
@@ -25,7 +24,6 @@ export default function App() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="location" element={<LocationIntel />} />
             <Route path="dataset" element={<DatasetExplorer />} />
-            <Route path="models" element={<ModelLab />} />
             <Route path="history" element={<HistoryPage />} />
           </Route>
         </Routes>
