@@ -42,3 +42,4 @@ coverage/
 *.sqlite
 *.sqlite3
 /backend/data/
+scratch/
