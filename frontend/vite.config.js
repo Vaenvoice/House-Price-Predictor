@@ -22,23 +22,6 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
-              return 'vendor';
-            }
-            if (id.includes('framer-motion') || id.includes('lucide-react')) {
-              return 'ui';
-            }
-            if (id.includes('recharts') || id.includes('leaflet')) {
-              return 'visualization';
-            }
-            if (id.includes('jspdf')) {
-              return 'pdf';
-            }
-            return 'others';
-          }
-        },
       },
     },
     chunkSizeWarningLimit: 1000,
