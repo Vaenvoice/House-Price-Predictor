@@ -50,46 +50,56 @@ class DataPreprocessor:
 
         return X_encoded.values, y, self.feature_names
 
+    def _get_indices(self):
+        """Helper to get indices for mapping features fast."""
+        indices = {
+            "area": -1, "rooms": -1, "age": -1,
+            "locations": {}
+        }
+        for j, fname in enumerate(self.feature_names):
+            if fname == "area": indices["area"] = j
+            elif fname == "rooms": indices["rooms"] = j
+            elif fname == "age": indices["age"] = j
+            elif fname.startswith("loc_"):
+                indices["locations"][fname[4:]] = j
+        return indices
+
     def transform(self, data):
-        """Transform new data using fitted preprocessor without Pandas."""
+        """Transform new data efficiently with batching and pre-calculated indices."""
         if not self.is_fitted:
             raise ValueError("Preprocessor not fitted. Call fit_transform first.")
 
-        # Handle both single dict and list of dicts/lists
-        if isinstance(data, dict):
-            samples = [data]
-        else:
-            samples = data
-
+        # Handle both single dict and list of dicts
+        samples = [data] if isinstance(data, dict) else data
         num_samples = len(samples)
         num_features = len(self.feature_names)
         X_encoded = np.zeros((num_samples, num_features))
+        
+        # Get indices once
+        idx = self._get_indices()
 
+        # Extract numeric values for batch scaling
+        numeric_matrix = np.zeros((num_samples, 3))
+        for i, sample in enumerate(samples):
+            numeric_matrix[i, 0] = sample.get("area", 1200)
+            numeric_matrix[i, 1] = sample.get("rooms", 2)
+            numeric_matrix[i, 2] = sample.get("age", 5)
+
+        # Batch Scale
+        scaled_matrix = self.scaler.transform(numeric_matrix)
+
+        # Map to encoded matrix
         for i, sample in enumerate(samples):
             # 1. Fill base numeric features
-            area = sample.get("area", 1200)
-            rooms = sample.get("rooms", 2)
-            age = sample.get("age", 5)
+            if idx["area"] != -1: X_encoded[i, idx["area"]] = scaled_matrix[i, 0]
+            if idx["rooms"] != -1: X_encoded[i, idx["rooms"]] = scaled_matrix[i, 1]
+            if idx["age"] != -1: X_encoded[i, idx["age"]] = scaled_matrix[i, 2]
+            
+            # 2. Fill location
             location = sample.get("location", "Mumbai")
-
-            # Numeric columns are at specific indices or handled by name
-            # For simplicity, we create a temporary array for scaling
-            numeric_vals = np.array([[area, rooms, age]])
-            scaled_vals = self.scaler.transform(numeric_vals)[0]
-
-            # Map to feature names indices
-            for j, fname in enumerate(self.feature_names):
-                if fname == "area":
-                    X_encoded[i, j] = scaled_vals[0]
-                elif fname == "rooms":
-                    X_encoded[i, j] = scaled_vals[1]
-                elif fname == "age":
-                    X_encoded[i, j] = scaled_vals[2]
-                elif fname.startswith("loc_"):
-                    # Check if this is the target location
-                    loc_name = fname[4:] # remove "loc_"
-                    if location == loc_name:
-                        X_encoded[i, j] = 1.0
+            loc_idx = idx["locations"].get(location)
+            if loc_idx is not None:
+                X_encoded[i, loc_idx] = 1.0
 
         return X_encoded
 

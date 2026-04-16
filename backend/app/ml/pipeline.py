@@ -5,7 +5,8 @@ Trains, compares, and manages multiple regression models.
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import joblib
 try:
@@ -28,6 +29,8 @@ class MLPipeline:
         self.best_model_name = None
         self.feature_importances = {}
         self.is_trained = False
+        self.analytics_summary = {}
+        self.location_stats = []
 
     def load_data(self, csv_path=None):
         """Load dataset from CSV or generate if missing."""
@@ -73,11 +76,12 @@ class MLPipeline:
                 random_state=random_state,
                 n_jobs=-1,
             ),
-            "Gradient Boosting": HistGradientBoostingRegressor(
-                max_iter=params.get("xgb_n_estimators", 100),
+            "XGBoost": XGBRegressor(
+                n_estimators=params.get("xgb_n_estimators", 100),
                 learning_rate=params.get("xgb_learning_rate", 0.1),
                 max_depth=params.get("xgb_max_depth", 6),
                 random_state=random_state,
+                n_jobs=-1,
             ),
         }
 
@@ -132,6 +136,9 @@ class MLPipeline:
 
         # Pre-compute analytics summary for Pandas-free runtime
         summary = {}
+        location_stats = []
+        correlation_data = {"columns": [], "data": []}
+        
         if df is not None:
             summary = {
                 "total_samples": len(df),
@@ -142,6 +149,12 @@ class MLPipeline:
                 "avg_age": float(df["age"].mean()),
                 "num_locations": df["location"].nunique(),
             }
+            location_stats = self.get_location_stats()
+            correlation_data = self.get_correlation_data()
+
+        self.analytics_summary = summary
+        self.location_stats = location_stats
+        self.correlation_data = correlation_data
 
         # Save pipeline state
         joblib.dump(
@@ -150,7 +163,8 @@ class MLPipeline:
                 "metrics": self.metrics,
                 "feature_importances": self.feature_importances,
                 "analytics_summary": summary,
-                "location_stats": self.get_location_stats() if df is not None else []
+                "location_stats": location_stats,
+                "correlation_data": correlation_data
             },
             MODEL_DIR / "pipeline_state.joblib",
         )
@@ -158,7 +172,7 @@ class MLPipeline:
         print(f"  Best model: {self.best_model_name} (R2 = {best_r2:.4f})")
         return self.metrics
 
-    def _predict_core(self, area, rooms, location, age):
+    def _predict_core(self, area, rooms, location, age, ensemble=True):
         """Run a single-model inference without extra derived sections."""
         if not self.is_trained:
             self.load()
@@ -168,22 +182,28 @@ class MLPipeline:
         model = self.models[self.best_model_name]
         prediction = float(model.predict(X)[0])
 
-        # Confidence range from ensemble variance
-        all_predictions = []
-        for name, m in self.models.items():
-            try:
-                pred = float(m.predict(X)[0])
-                all_predictions.append(pred)
-            except Exception:
-                pass
+        # Confidence range
+        if ensemble:
+            # Full ensemble variance for high-fidelity confidence
+            all_predictions = []
+            for name, m in self.models.items():
+                try:
+                    pred = float(m.predict(X)[0])
+                    all_predictions.append(pred)
+                except Exception:
+                    pass
 
-        if len(all_predictions) > 1:
-            std = np.std(all_predictions)
-            confidence_low = max(0, prediction - 1.96 * std)
-            confidence_high = prediction + 1.96 * std
+            if len(all_predictions) > 1:
+                std = np.std(all_predictions)
+                confidence_low = max(0, prediction - 1.96 * std)
+                confidence_high = prediction + 1.96 * std
+            else:
+                confidence_low = prediction * 0.85
+                confidence_high = prediction * 1.15
         else:
-            confidence_low = prediction * 0.85
-            confidence_high = prediction * 1.15
+            # Fast heuristic for background/what-if scenarios
+            confidence_low = prediction * 0.92
+            confidence_high = prediction * 1.08
 
         # Financial ROI - Estimated EMI
         loan_amount = prediction * 0.8  # 80% LTV
@@ -202,7 +222,7 @@ class MLPipeline:
 
         return {
             "predicted_price": round(prediction, -3),
-            "formatted_price": formatted,
+            "formatted_price": self.format_price(prediction),
             "confidence_low": round(max(0, confidence_low), -3),
             "confidence_high": round(confidence_high, -3),
             "model_used": self.best_model_name,
@@ -210,9 +230,32 @@ class MLPipeline:
             "is_outlier": is_outlier,
         }
 
+    def _predict_batch(self, samples):
+        """Internal helper for high-performance batch prediction (Best Model Only)."""
+        if not self.is_trained:
+            self.load()
+        
+        X = self.preprocessor.transform(samples)
+        model = self.models[self.best_model_name]
+        predictions = model.predict(X)
+        
+        results = []
+        for i, pred in enumerate(predictions):
+            results.append({
+                "predicted_price": round(float(pred), -3),
+                "formatted_price": self.format_price(float(pred))
+            })
+        return results
+
+    def format_price(self, price):
+        """Helper to format price in INR units."""
+        if price < 10000000:
+            return f"₹{price/100000:.1f}L"
+        return f"₹{price/10000000:.2f}Cr"
+
     def predict(self, area, rooms, location, age):
-        """Run prediction using the best model."""
-        result = self._predict_core(area, rooms, location, age)
+        """Run prediction using the best model with full ensemble confidence."""
+        result = self._predict_core(area, rooms, location, age, ensemble=True)
         result["alternatives"] = self.get_market_alternatives(area, rooms, location, age)
         return result
 
@@ -222,94 +265,88 @@ class MLPipeline:
         current_info = LOCATIONS.get(current_location, {"multiplier": 1.0, "type": "tier-2"})
         current_mult = current_info["multiplier"]
         
-        alternatives = []
-        # Look for locations with lower multiplier but same or better 'type'
+        alternatives_input = []
+        loc_names = []
         for loc_name, info in LOCATIONS.items():
             if loc_name == current_location: continue
-            
-            # If it's cheaper by at least 15%
             if info["multiplier"] < current_mult * 0.85:
-                pred = self._predict_core(area, rooms, loc_name, age)
-                alternatives.append({
-                    "location": loc_name,
-                    "price": pred["predicted_price"],
-                    "savings": round(current_mult * 100 - info["multiplier"] * 100, 1),
-                    "type": info["type"]
-                })
+                alternatives_input.append({"area": area, "rooms": rooms, "location": loc_name, "age": age})
+                loc_names.append(loc_name)
         
-        # Return top 3 best savings
+        if not alternatives_input:
+            return []
+
+        batch_results = self._predict_batch(alternatives_input)
+        
+        alternatives = []
+        for loc_name, res in zip(loc_names, batch_results):
+            info = LOCATIONS[loc_name]
+            alternatives.append({
+                "location": loc_name,
+                "price": res["predicted_price"],
+                "savings": round(current_mult * 100 - info["multiplier"] * 100, 1),
+                "type": info["type"]
+            })
+        
         return sorted(alternatives, key=lambda x: x["savings"], reverse=True)[:3]
 
     def get_suggestions(self, area, rooms, location, age):
-        """Generate AI suggestions for price optimization."""
-        base = self._predict_core(area, rooms, location, age)
-        suggestions = []
-
-        # Area increase suggestion
+        """Generate AI suggestions for price optimization using batching."""
+        # 0. Base Prediction
+        base = self._predict_core(area, rooms, location, age, ensemble=False)
+        
+        # 1. Define scenarios
+        scenarios = []
+        scenario_meta = []
+        
+        # Area increase
         if area + 200 <= 5000:
-            more_area = self._predict_core(area + 200, rooms, location, age)
-            diff = more_area["predicted_price"] - base["predicted_price"]
-            suggestions.append(
-                {
-                    "type": "area",
-                    "text": "Increasing area by 200 sq ft",
-                    "impact": diff,
-                    "direction": "up" if diff > 0 else "down",
-                }
-            )
-
-        # Extra room suggestion
+            scenarios.append({"area": area + 200, "rooms": rooms, "location": location, "age": age})
+            scenario_meta.append({"type": "area", "text": "Increasing area by 200 sq ft"})
+            
+        # Extra room
         if rooms < 6:
-            more_rooms = self._predict_core(area, rooms + 1, location, age)
-            diff = more_rooms["predicted_price"] - base["predicted_price"]
-            suggestions.append(
-                {
-                    "type": "rooms",
-                    "text": "Adding 1 more room",
-                    "impact": diff,
-                    "direction": "up" if diff > 0 else "down",
-                }
-            )
-
-        # Newer construction suggestion
+            scenarios.append({"area": area, "rooms": rooms + 1, "location": location, "age": age})
+            scenario_meta.append({"type": "rooms", "text": "Adding 1 more room"})
+            
+        # Newer construction
         if age > 5:
-            newer = self._predict_core(area, rooms, location, max(0, age - 5))
-            diff = newer["predicted_price"] - base["predicted_price"]
-            suggestions.append(
-                {
-                    "type": "age",
-                    "text": "5 years newer construction",
-                    "impact": diff,
-                    "direction": "up" if diff > 0 else "down",
-                }
-            )
-
-        # Better location suggestion
+            scenarios.append({"area": area, "rooms": rooms, "location": location, "age": max(0, age - 5)})
+            scenario_meta.append({"type": "age", "text": "5 years newer construction"})
+            
+        # Better location
         from app.config import LOCATIONS
-
         current_mult = LOCATIONS.get(location, {}).get("multiplier", 1.0)
         better_locations = sorted(
             [(k, v) for k, v in LOCATIONS.items() if v["multiplier"] > current_mult],
             key=lambda x: x[1]["multiplier"],
         )
         if better_locations:
-            best_loc_name, best_loc_info = better_locations[0]
-            loc_pred = self._predict_core(area, rooms, best_loc_name, age)
-            diff = loc_pred["predicted_price"] - base["predicted_price"]
-            suggestions.append(
-                {
-                    "type": "location",
-                    "text": f"Moving to {best_loc_name}",
-                    "impact": diff,
-                    "direction": "up" if diff > 0 else "down",
-                }
-            )
+            best_loc_name, _ = better_locations[0]
+            scenarios.append({"area": area, "rooms": rooms, "location": best_loc_name, "age": age})
+            scenario_meta.append({"type": "location", "text": f"Moving to {best_loc_name}"})
+
+        if not scenarios:
+            return []
+
+        # 2. Run Batch
+        batch_results = self._predict_batch(scenarios)
+        
+        # 3. Format results
+        suggestions = []
+        for meta, res in zip(scenario_meta, batch_results):
+            diff = res["predicted_price"] - base["predicted_price"]
+            suggestions.append({
+                **meta,
+                "impact": diff,
+                "direction": "up" if diff > 0 else "down",
+            })
 
         return suggestions
 
     def get_advanced_insights(self, area, rooms, location, age):
         """Generate high-fidelity AI insights for a specific property."""
-        base_prediction = self._predict_core(area, rooms, location, age)
+        base_prediction = self._predict_core(area, rooms, location, age, ensemble=False)
         current_price = base_prediction["predicted_price"]
         current_ppsf = current_price / area
 
@@ -342,25 +379,21 @@ class MLPipeline:
         
         rating = max(1.0, min(5.0, rating))
 
-        # 4. Local Feature Impact (simplified SHAP)
-        # We perturb each feature to see direction and magnitude
-        impacts = {}
+        # 4. Local Feature Impact (simplified SHAP) using Batching
+        scenarios = [
+            {"area": area * 1.1, "rooms": rooms, "location": location, "age": age},
+            {"area": area, "rooms": min(6, rooms + 1), "location": location, "age": age},
+            {"area": area, "rooms": rooms, "location": location, "age": max(0, age - 5)},
+            {"area": area, "rooms": rooms, "location": "Rural", "age": age}
+        ]
+        batch_results = self._predict_batch(scenarios)
         
-        # Area Impact
-        p_area = self._predict_core(area * 1.1, rooms, location, age)["predicted_price"]
-        impacts["area"] = (p_area - current_price) / current_price
-        
-        # Room Impact
-        p_rooms = self._predict_core(area, min(6, rooms + 1), location, age)["predicted_price"]
-        impacts["rooms"] = (p_rooms - current_price) / current_price
-        
-        # Age Impact
-        p_age = self._predict_core(area, rooms, location, max(0, age - 5))["predicted_price"]
-        impacts["age"] = (p_age - current_price) / current_price
-        
-        # Location Impact (compared to Rural)
-        p_loc = self._predict_core(area, rooms, "Rural", age)["predicted_price"]
-        impacts["location"] = (current_price - p_loc) / current_price
+        impacts = {
+            "area": (batch_results[0]["predicted_price"] - current_price) / current_price,
+            "rooms": (batch_results[1]["predicted_price"] - current_price) / current_price,
+            "age": (batch_results[2]["predicted_price"] - current_price) / current_price,
+            "location": (current_price - batch_results[3]["predicted_price"]) / current_price
+        }
 
         # Normalize impacts for visualization
         total = sum(abs(v) for v in impacts.values())
@@ -414,9 +447,27 @@ class MLPipeline:
 
             self.is_trained = True
             print(f"  Loaded {len(self.models)} models from disk")
+            
+            # Warm up models to avoid first-prediction latency (worker pool init)
+            self.warmup()
         except Exception as e:
             print(f"  No saved models found: {e}")
             self.is_trained = False
+
+    def warmup(self):
+        """Perform dummy prediction to warm up parallel worker pools and lazy-loaded weights."""
+        if not self.is_trained or not self.models:
+            return
+        try:
+            print("  Warming up ML models...")
+            dummy_data = {"area": 1200, "rooms": 2, "location": "Mumbai", "age": 5}
+            # Predict with all models to ensure pools are ready
+            X = self.preprocessor.transform([dummy_data])
+            for model in self.models.values():
+                model.predict(X)
+            print("  Warmup complete!")
+        except Exception as e:
+            print(f"  Warmup failed: {e}")
 
     def get_correlation_data(self):
         """Return correlation matrix – use pre-computed if on Vercel."""

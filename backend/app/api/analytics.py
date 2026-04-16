@@ -46,14 +46,30 @@ def get_analytics_summary():
 
     # Use pre-computed summary to avoid Pandas runtime dependency
     summary = getattr(pipeline, "analytics_summary", {})
+    
+    # Fallback: if summary is missing but we are "trained", 
+    # it might be a legacy state file or a fresh training in progress
     if not summary:
-        return {"status": "summary_missing"}
+        # Check if we can compute it on the fly (might be slow but better than empty)
+        try:
+            df = pipeline.load_data()
+            if df is not None:
+                summary = {
+                    "total_samples": len(df),
+                    "avg_price": float(df["price"].mean()),
+                    "best_r2": pipeline.metrics.get(pipeline.best_model_name, {}).get("r2_score", 0),
+                }
+                pipeline.analytics_summary = summary
+        except Exception:
+            return {"status": "summary_missing"}
 
     return {
-        **summary,
+        "total_samples": summary.get("total_samples", 0),
+        "avg_price": summary.get("avg_price", 0),
         "best_model": pipeline.best_model_name,
-        "best_r2": pipeline.metrics.get(pipeline.best_model_name, {}).get(
+        "best_r2": summary.get("best_r2") or pipeline.metrics.get(pipeline.best_model_name, {}).get(
             "r2_score", 0
         ),
         "models_trained": len(pipeline.metrics),
+        "status": "ready"
     }

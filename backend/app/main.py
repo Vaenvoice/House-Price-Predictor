@@ -45,6 +45,7 @@ async def initialize_ml_pipeline():
             else:
                 print("[Background] Training ML models...")
                 pipeline.train()
+                pipeline.warmup()
         else:
             print("[Background] Using cached trained models from disk.")
 
