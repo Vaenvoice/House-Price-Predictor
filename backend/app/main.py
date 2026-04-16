@@ -132,17 +132,17 @@ def health_check():
         "best_model": pipeline.best_model_name
     }
 
-@app.get("/", tags=["Health"])
+@app.api_route("/", methods=["GET", "HEAD"], tags=["Health"])
 def root():
     """Root endpoint for basic connectivity check."""
     return {"message": "VaenEstate API Online", "status": "active"}
 
-@app.get("/health", tags=["Health"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])
 def root_health():
     """Top-level health check."""
     return {"status": "online"}
 
-@app.get("/ping", tags=["Health"])
+@app.api_route("/ping", methods=["GET", "HEAD"], tags=["Health"])
 def ping():
     """Minimal endpoint for Uptime Robot keep-alive."""
     return "pong"
