@@ -77,6 +77,9 @@ def predict_price(req: PredictionRequest):
         confidence_high=result["confidence_high"],
         model_used=result["model_used"],
         formatted_price=format_inr(result["predicted_price"]),
+        emi_estimate=result.get("emi_estimate"),
+        is_outlier=result.get("is_outlier", False),
+        alternatives=result.get("alternatives", []),
         suggestions=suggestions,
         insights=insights,
     )
