@@ -5,6 +5,7 @@ Intelligent House Price Prediction Platform
 from contextlib import asynccontextmanager
 import os
 import shutil
+import asyncio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +18,45 @@ from app.config import DATASET_PATH, IS_VERCEL, BUNDLED_DATA_DIR, BUNDLED_MODEL_
 from app.api import predictions, models, datasets, analytics, auth
 
 
+async def initialize_ml_pipeline():
+    """Background task to initialize data and train models."""
+    print("\n[Background] Starting ML initialization...")
+    try:
+        # 1. Generate dataset if missing
+        if not DATASET_PATH.exists():
+            print("[Background] Generating synthetic dataset (10,000 samples)...")
+            generate_dataset()
+        else:
+            print(f"[Background] Dataset found: {DATASET_PATH}")
+
+        # 2. Load saved models when possible, train only when needed
+        force_retrain = os.getenv("FORCE_RETRAIN", "false").lower() in {"1", "true", "yes"}
+        loaded = False
+        if not force_retrain:
+            print("[Background] Loading saved ML models...")
+            pipeline.load()
+            loaded = pipeline.is_trained and bool(pipeline.models)
+
+        if not loaded:
+            if IS_VERCEL:
+                print("[Background] Using bundled fallback models for Vercel.")
+                pipeline.load(model_dir=BUNDLED_MODEL_DIR)
+            else:
+                print("[Background] Training ML models...")
+                pipeline.train()
+        else:
+            print("[Background] Using cached trained models from disk.")
+
+        print(f"\n[Background] Best model: {pipeline.best_model_name}")
+        for name, m in pipeline.metrics.items():
+            marker = " *" if name == pipeline.best_model_name else ""
+            print(f"   {name}: R2={m['r2_score']:.4f}, RMSE={m['rmse']:,.0f}, MAE={m['mae']:,.0f}{marker}")
+        
+        print("\n[Background] ML Pipeline is ready!")
+    except Exception as e:
+        print(f"\n[Background] CRITICAL: Error during background startup: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup/shutdown lifecycle."""
@@ -24,7 +64,7 @@ async def lifespan(app: FastAPI):
     print("   VaenEstate - Intelligent Price Prediction")
     print("===============================================")
 
-    # 1. Initialize database
+    # 1. Initialize database (Fast/Blocking)
     try:
         # On Vercel, copy packaged data/models into writable /tmp.
         if IS_VERCEL:
@@ -41,43 +81,15 @@ async def lifespan(app: FastAPI):
                     if not target.exists():
                         shutil.copy2(file_path, target)
 
-        print("\nInitializing database...")
+        print("Initializing database...")
         init_db()
-
-        # 2. Generate dataset if missing
-        if not DATASET_PATH.exists():
-            print("Generating synthetic dataset (10,000 samples)...")
-            generate_dataset()
-        else:
-            print(f"Dataset found: {DATASET_PATH}")
-
-        # 3. Load saved models when possible, train only when needed
-        force_retrain = os.getenv("FORCE_RETRAIN", "false").lower() in {"1", "true", "yes"}
-        loaded = False
-        if not force_retrain:
-            print("Loading saved ML models...")
-            pipeline.load()
-            loaded = pipeline.is_trained and bool(pipeline.models)
-
-        if not loaded:
-            if IS_VERCEL:
-                print("Using bundled fallback models for Vercel.")
-                pipeline.load(model_dir=BUNDLED_MODEL_DIR)
-            else:
-                print("Training ML models...")
-                pipeline.train()
-        else:
-            print("Using cached trained models from disk.")
-
-        print(f"\nBest model: {pipeline.best_model_name}")
-        for name, m in pipeline.metrics.items():
-            marker = " *" if name == pipeline.best_model_name else ""
-            print(f"   {name}: R2={m['r2_score']:.4f}, RMSE={m['rmse']:,.0f}, MAE={m['mae']:,.0f}{marker}")
     except Exception as e:
-        print(f"\nCRITICAL: Error during startup sequence: {e}")
-        print("Continuing with limited functionality...")
+        print(f"Database initialization error: {e}")
 
-    print("\nVaenEstate is ready!")
+    # 2. Start ML initialization in background to prevent Render timeouts
+    asyncio.create_task(initialize_ml_pipeline())
+
+    print("\nVaenEstate is starting up!")
     print("API docs: http://localhost:8000/docs\n")
 
     yield
