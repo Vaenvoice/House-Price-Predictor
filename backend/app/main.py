@@ -20,6 +20,7 @@ from app.api import predictions, models, datasets, analytics, auth
 
 async def initialize_ml_pipeline():
     """Background task to initialize data and train models."""
+    await asyncio.sleep(0.1)  # Yield to event loop to allow port binding
     print("\n[Background] Starting ML initialization...")
     try:
         # 1. Generate dataset if missing

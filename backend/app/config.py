@@ -33,7 +33,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
 # Dataset Configuration
-DATASET_SIZE = 50000
+DATASET_SIZE = 10000
 DATASET_PATH = DATA_DIR / "synthetic_dataset.csv"
 
 # Indian City Locations with pricing multipliers and coordinates
