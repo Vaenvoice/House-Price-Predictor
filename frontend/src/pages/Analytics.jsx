@@ -12,8 +12,8 @@ export default function Analytics() {
   const [importance, setImportance] = useState(null);
 
   useEffect(() => {
-    apiClient.get('/analytics/summary').then(res => setSummary(res.data)).catch(console.error);
-    apiClient.get('/models/comparison').then(res => setModels(res.data)).catch(console.error);
+    apiClient.get('/analytics/summary').then(res => setSummary(res.data || null)).catch(console.error);
+    apiClient.get('/models/comparison').then(res => setModels(res.data || [])).catch(console.error);
     apiClient.get('/models/feature-importance').then(res => {
       if(res.data?.importances) {
         const arr = Object.entries(res.data.importances)

@@ -25,7 +25,7 @@ export default function LocationIntel() {
   const [data, setData] = useState([]);
 
   useEffect(() => {
-    apiClient.get('/analytics/location-pricing').then(res => setData(res.data)).catch(console.error);
+    apiClient.get('/analytics/location-pricing').then(res => setData(res.data || [])).catch(console.error);
   }, []);
 
   // India center coords
@@ -50,7 +50,7 @@ export default function LocationIntel() {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
               />
               
-              {data.filter(d => d.lat && d.lng).map((loc, i) => {
+              {(data || []).filter(d => d.lat && d.lng).map((loc, i) => {
                 const color = loc.type === 'tier-1' ? '#3b82f6' : loc.type === 'tier-2' ? '#8b5cf6' : '#10b981';
                 return (
                   <Marker
@@ -83,7 +83,7 @@ export default function LocationIntel() {
             <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">City Intelligence</h3>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-1">
-            {data.map((loc, i) => (
+            {(data || []).map((loc, i) => (
               <div key={i} className="flex justify-between items-center p-4 hover:bg-muted rounded-lg transition-all duration-200 group cursor-default">
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-foreground">{loc.location}</span>

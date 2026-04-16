@@ -177,7 +177,7 @@ export default function Dashboard() {
                 onChange={(e) => setFormData({...formData, location: e.target.value})}
                 className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary transition-all cursor-pointer"
               >
-                {locations.map(loc => (
+                {(locations || []).map(loc => (
                   <option key={loc.name} value={loc.name} className="dark:bg-background">
                     {loc.label}
                   </option>
@@ -329,7 +329,7 @@ export default function Dashboard() {
                   <h3 className="font-bold">Value Finder</h3>
                 </div>
                 <div className="space-y-4">
-                   {prediction?.alternatives?.map((alt, i) => (
+                   {(prediction?.alternatives || []).map((alt, i) => (
                      <div key={i} className="flex items-center justify-between group cursor-default">
                         <div>
                            <div className="text-xs font-bold">{alt.location}</div>
@@ -341,7 +341,7 @@ export default function Dashboard() {
                         </div>
                      </div>
                    ))}
-                   {!prediction?.alternatives && (
+                   {(!prediction?.alternatives || prediction.alternatives.length === 0) && (
                      <div className="py-8 text-center text-xs text-muted-foreground font-medium italic">Scanning market alternatives...</div>
                    )}
                 </div>
@@ -451,7 +451,7 @@ export default function Dashboard() {
 
             {/* Simple Optimization Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-12">
-              {prediction?.suggestions?.map((sug, i) => (
+              {(prediction?.suggestions || []).map((sug, i) => (
                 <motion.div 
                   initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 + (i*0.1) }}
                   key={i} className="p-5 rounded-xl bg-card border border-border group hover:border-muted-foreground/50 transition-all duration-300"

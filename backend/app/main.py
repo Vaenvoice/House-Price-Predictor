@@ -118,28 +118,7 @@ def health_check():
         "best_model": pipeline.best_model_name
     }
 
-# 1. Mount Static Files (after API routes)
-# We assume the frontend is built into frontend/dist
-frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "dist")
-
-if os.path.exists(frontend_path):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
-
-    @app.get("/{full_path:path}")
-    async def serve_react_app(request: Request, full_path: str):
-        """Serve the React app for any non-API routes."""
-        if full_path.startswith("api"):
-            return None # FastAPI will continue to router
-        
-        # Check if file exists in dist (for images, favicon, etc)
-        file_path = os.path.join(frontend_path, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-            
-        # Default to index.html for SPA routing
-        return FileResponse(os.path.join(frontend_path, "index.html"))
-else:
-    print(f"Warning: Frontend dist not found at {frontend_path}. Static serving disabled.")
+# (Moved to end of file to prevent route shadowing)
 
 
 
@@ -147,7 +126,20 @@ else:
 # Pre-computed config for speed
 from app.config import PRECOMPUTED_LOCATIONS
 
+print(f"DEBUG: PRECOMPUTED_LOCATIONS initialization: {PRECOMPUTED_LOCATIONS is not None} (Type: {type(PRECOMPUTED_LOCATIONS)})")
+if PRECOMPUTED_LOCATIONS is None:
+    print("CRITICAL: PRECOMPUTED_LOCATIONS is None. Check app/config.py!")
+
 @app.get("/api/locations", tags=["Config"])
 def get_locations():
     """Get available locations with metadata."""
-    return PRECOMPUTED_LOCATIONS
+    # Robust fallback in case of initialization timing issues
+    if PRECOMPUTED_LOCATIONS is not None:
+        return PRECOMPUTED_LOCATIONS
+    
+    # On-demand computation if somehow None
+    from app.config import PRECOMPUTED_LOCATIONS as fallback
+    if fallback is not None:
+        return fallback
+        
+    return []

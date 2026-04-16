@@ -41,11 +41,4 @@ coverage/
 *.db
 *.sqlite
 *.sqlite3
-/backend/data/estateai.db
-/backend/data/vaenestate_data/
-
-# Keep deployment-required model artifacts tracked
-!/backend/data/
-!/backend/data/models/
-!/backend/data/models/*.joblib
-!/backend/data/synthetic_dataset.csv
+/backend/data/
