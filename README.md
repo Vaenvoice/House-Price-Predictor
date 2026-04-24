@@ -101,7 +101,6 @@ npm run dev
 ```
 
 ---
-
 ## ☁️ Deployment
 
 - **Hosting**: Designed for **Vercel** (Serverless) and **Render/Railway** (Docker/Managed).
